@@ -4,3 +4,5 @@ https://censusreporter.org/profiles/05000US18097-marion-county-in/
 Note that censusreporter.org reports raw data from the most recent survey (currently 2019). 
 This study used the 2018 data, which have been pre-processed and aggregated in the censusdata.csv file and the censusdata.Rdata file. 
 A sample of the 2019 raw data has been provided for testing the pre-processing code. 
+
+The census tract shape files are in the censustracts folder.
