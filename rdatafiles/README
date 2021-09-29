@@ -1,3 +1,7 @@
 Rdata files from various stages of the analysis. 
 
-censusdata.Rdata = pre-preprocessed census data from the 2018 American Community Survey.
+censusdata.rdata = pre-preprocessed census data from the 2018 American Community Survey.
+waterdata.rdata = pre-processed water consumption data from the loacl water utility.
+climatedata.rdata = pre-processed climate data from PRISM Climate Group.
+alldata.rdata = all input data, aggregated by month and merged into a single list.
+firstmodelrunresults.rdata = results from the initial model run with all input data.
