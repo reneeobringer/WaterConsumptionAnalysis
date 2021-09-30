@@ -6,3 +6,4 @@ climatedata.rdata = pre-processed climate data from PRISM Climate Group.
 alldata.rdata = all input data, aggregated by month and merged into a single list.
 firstmodelrunresults.rdata = results from the initial model run with all input data.
 variableselection.rdata = final dataset following the variable selection process.
+finalanalysis.rdata = results from the final model run.
