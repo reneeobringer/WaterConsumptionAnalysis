@@ -2,6 +2,16 @@
 # Code By: Renee Obringer
 # Last Updated: 30 September 2021
 
+# ORGANIZATION:
+# This code is organized in sections, each is denoted by multiple #
+# SHAPE FILE PRE-PROCESSING -- Preprocessing the shapefiles, this is in preparation for figures and can be ignored if desired
+# LOAD DATA -- Here we load the data necessary for the model training and testing
+# MERGE INPUT DATA -- Data preprocessing
+# MODEL DEVELOPMENT - INITIAL MODEL RUN -- This is the first phase of the model run, which considers all input data
+# MODEL DEVELOPMENT - VARIABLE SELECTION -- Here, variables are selected based on a two-stage process
+# FINAL MODEL RUN -- Final model run using only the important variables selected above
+# FIGURES -- Visualization
+
 rm(list=ls())
 
 # libraries  
@@ -17,9 +27,12 @@ library(corrplot)
 library(cowplot)
 
 # set directories
-datadir1 <- '/Users/robringer/Library/Mobile Documents/com~apple~CloudDocs/Documents/Research/Rcode/projects/indywaterconsumption/git/censustracts' # shape file directory
-datadir2 <- '/Users/robringer/Library/Mobile Documents/com~apple~CloudDocs/Documents/Research/Rcode/projects/indywaterconsumption/git'   # input data directory
-outputdir <- '/Users/robringer/Library/Mobile Documents/com~apple~CloudDocs/Documents/Research/Rcode/projects/indywaterconsumption/git'  # output directory
+# NOTE: set these directories to a folder on your personal machine using the appropriate file path
+# We used three separate directories throughout the code, but each could be the same path
+
+datadir1 <- ''   # The shapefile directory is used for visualization
+datadir2 <- ''   # The input data directory is used to import the data used for training and testing the model
+outputdir <- ''  # The output directory is used for storing output files, including Rdata files
 
 
 ######## SHAPE FILE PRE-PROCESSING ############
