@@ -1,6 +1,6 @@
 # Project: Water Consumption Analysis - Indianapolis, Indiana
 # Code By: Renee Obringer
-# Last Updated: 30 September 2021
+# Last Updated: 01 April 2022
 
 # ORGANIZATION:
 # This code is organized in sections, each is denoted by multiple #
@@ -25,15 +25,22 @@ library(maptools) # for ggplot map plotting
 library(rgeos)    # for maptool
 library(corrplot)
 library(cowplot)
+library(VSURF)    # for comparing variable selection techniques
+
+# set file path
+# NOTE: set this path to the folder on your personal machine where you downaloded the GitHub zip folder
+# for example: path <- '/Users/rqo5125/Downloads/WaterConsumptionAnalysis-main'
+
+path <- '' # main file path
 
 # set directories
-# NOTE: set these directories to a folder on your personal machine using the appropriate file path
-# We used three separate directories throughout the code, but each could be the same path
+datadir1 <- paste(path,'/CensusTracts/', sep = '')   # The census tract directory is used for visualization
+datadir2 <- paste(path,'/InputData/', sep = '')      # The input data directory is used to import the data used for training and testing the model
+rdatadir <- paste(path,'/rdatafiles/', sep = '')     # The rdata directory is contains the rdata files
 
-datadir1 <- ''   # The shapefile directory is used for visualization
-datadir2 <- ''   # The input data directory is used to import the data used for training and testing the model
-outputdir <- ''  # The output directory is used for storing output files, including Rdata files
-
+# OPTIONAL: Create a directory for output files
+outputdir <- paste(path,'/output/', sep = '')        # The output directory will be where you send any non-rdata output files (e.g., csv, pdf, etc.)
+dir.create(outputdir)
 
 ######## SHAPE FILE PRE-PROCESSING ############
 
@@ -46,9 +53,9 @@ tract <- subset(tract, grepl("18097", tract@data$GEOID)) # extract Marion County
 # plot study area
 ggtract <- fortify(tract, region = "GEOID") 
 
-ggplot() +
-  geom_polygon(data = ggtract , aes(x=long, y=lat, group = group), color="grey50", , fill='white') + 
-  theme_light() + theme(text = element_text(size=16)) + xlab("Longitude") + ylab ("Latitude")
+#ggplot() +
+#  geom_polygon(data = ggtract , aes(x=long, y=lat, group = group), color="grey50", , fill='white') + 
+#  theme_light() + theme(text = element_text(size=16)) + xlab("Longitude") + ylab ("Latitude")
 
 # get lat/lon for all census tracts
 coordinates <- data.frame(tract$GEOID, as.numeric(as.character(tract$INTPTLAT)), as.numeric(as.character(tract$INTPTLON)))
@@ -57,7 +64,7 @@ setwd(outputdir)
 write.csv(coordinates,file='censustracts.csv')
 
 ######## LOAD DATA ######
-setwd(datadir2)
+setwd(rdatadir)
 
 # Census Data
 load('censusdata.rdata')
@@ -92,11 +99,11 @@ november <- merge(censuswater[,-c(2:11,13)],novdata[,-c(2:5)],by='geoid');decemb
 # Merge All Months into a List
 finaldata <- list(january, february, march, april, may, june, july, august, september, october, november, december)
 
-setwd(datadir2)
+setwd(rdatadir)
 save(finaldata,file='alldata.rdata')
 
 ######## MODEL DEVELOPMENT - INITIAL MODEL RUN #######
-setwd(datadir2)
+setwd(rdatadir)
 load('alldata.rdata')
 
 # separate data into seasons
@@ -194,11 +201,11 @@ for (d in 1:2) {
   
 }
 
-setwd(outputdir)
+setwd(rdatadir)
 save(list=c("data","alldatafin","allmodsfin","allrsqfin","allrmsefin","allnrmsefin"), file="firstmodelrunresults.rdata")
 
 ######## MODEL DEVELOPMENT - VARIABLE SELECTION #######
-setwd(outputdir)
+setwd(rdatadir)
 load('firstmodelrunresults.rdata')
 
 # first step: filtering based on correlation
@@ -307,12 +314,20 @@ for (d in 1:2) {
   finaldata[[d]] <- newvars
 }
 
+# OPTIONAL: VSURF test
+# Note this loop takes ~2.5 hours to run on MacOS w/ 16 GB RAM
 
+#vsurf_results <- list()
+#for (i in 1:4) {
+#  vsurf_results[[i]] <- VSURF(consumption ~ ., data = data[[1]][[i]][,-c(1,3)])
+#}
+
+setwd(rdatadir)
 save(list=c("finaldata"), file="variableselection.rdata")
 
 
 ######## FINAL MODEL RUN #######
-setwd(outputdir)
+setwd(rdatadir)
 load('variableselection.rdata')
 
 alldatafin <- list()
@@ -387,13 +402,66 @@ for (d in 1:2) {
   
 }
 
+# save measures of model performances for the moderate-intensity dataset
+mod_perf <- data.frame(allrsqfin[[1]], allrmsefin[[1]]*1000000, allnrmsefin[[1]], row.names = c('Spring', 'Summer', 'Fall', 'Winter'))
+names(mod_perf) <- c('R^2', 'RMSE (gal.)', 'NRMSE')
+
+setwd(outputdir)
+write.csv(mod_perf, 'modelperformance.csv')
+
+setwd(rdatadir)
 save(list=c("alldatafin","allmodsfin","allrsqfin","allrmsefin","allnrmsefin"), file="finalanalysis.rdata")
 
 
 ######## FIGURES #######
-setwd(outputdir)
+setwd(rdatadir)
 load('finalanalysis.rdata')
 
+# FIGURE 2
+
+# edit geoid column
+for (i in 1:4) {
+  alldatafin[[1]][[i]][[1]] <- gsub("14000US","",alldatafin[[1]][[i]][[1]])
+  alldatafin[[2]][[i]][[1]] <- gsub("14000US","",alldatafin[[2]][[i]][[1]])
+}
+
+p <- list()
+for (i in 1:4) {
+  mondata <- data.frame(alldatafin[[1]][[i]][[1]], alldatafin[[1]][[i]][[2]], alldatafin[[1]][[i]][[3]], ((alldatafin[[1]][[i]][[3]])-(alldatafin[[1]][[i]][[2]])))
+  
+  mondata <- aggregate(mondata[,2:4], by=list(mondata[,1]), FUN=mean)
+  names(mondata) <- c("id", "actualvalues", "predvalues", "anomaly")
+  
+  # using ggplot to plot spatial data
+  
+  ggtract <- fortify(tract, region = "GEOID") 
+  ggtract <- left_join(ggtract, mondata, by=c("id")) # join tabular data
+  
+  if (i == 1 | i == 3) {
+    p[[i]] <- ggplot() +
+                      geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=anomaly), color="grey50") +
+                      scale_fill_gradientn(colors = c("cadetblue", "white", "red"), values = c(1,0.5, 0), name = 'Difference\n(mill. gal.)',limits=c(-4,4)) + 
+                      theme_light() + theme(text = element_text(size=18)) + xlab("Longitude (deg. E)") + ylab("Latitude (deg. N)") +
+                      #ggtitle(paste('Anomalies in ',seasnames[i],' Water Use')) + 
+                      ggtitle(paste(seasnames[i])) + 
+                      theme(legend.position = "none")
+  } else {
+    p[[i]] <- ggplot() +
+                      geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=anomaly), color="grey50") +
+                      scale_fill_gradientn(colors = c("cadetblue", "white", "red"), values = c(1,0.5, 0), name = 'Difference\n(mill. gal.)',limits=c(-4,4)) + 
+                      theme_light() + theme(text = element_text(size=18)) + xlab("Longitude (deg. E)") + ylab("Latitude (deg. N)") +
+                      ggtitle(paste(seasnames[i]))  
+  }
+}
+
+setwd(outputdir)
+pdf('figure2.pdf', width = 9, height = 7)
+plot_grid(p[[1]],p[[2]],p[[3]],p[[4]],align = 'v',nrow = 2, rel_widths = c(3/7,4/7))
+dev.off()
+
+# FIGURE 3 
+
+# setting up labels
 seasnames <- c('Spring','Summer','Fall','Winter')
 labelnames <- list(c('Some College Eduction','Families w/ Kids','House Value < $50k','Home Ownership','Walk to Work'),
                    c("Associate's Degree",'Income $75k-$100k','Families w/ Kids','House Value $50k-$100k','Home Ownership','Aged 50-64'),
@@ -417,263 +485,149 @@ for (i in 1:4) {
     coord_flip() + theme_light() +theme(text = element_text(size=18)))
 }
 
+setwd(outputdir)
+pdf('figure3.pdf', width = 12, height = 6)
 plot_grid(p[[1]],p[[2]],p[[3]],p[[4]],align = 'v',nrow = 2)
+dev.off()
 
-# edit geoid column
-for (i in 1:4) {
-  alldatafin[[1]][[i]][[1]] <- gsub("14000US","",alldatafin[[1]][[i]][[1]])
-  alldatafin[[2]][[i]][[1]] <- gsub("14000US","",alldatafin[[2]][[i]][[1]])
-}
+# FIGURE 4
 
-p <- list()
-for (i in 1:4) {
-  mondata <- data.frame(alldatafin[[1]][[i]][[1]], alldatafin[[1]][[i]][[2]], alldatafin[[1]][[i]][[3]], ((alldatafin[[1]][[i]][[3]])-(alldatafin[[1]][[i]][[2]])))
-  
-  mondata <- aggregate(mondata[,2:4], by=list(mondata[,1]), FUN=mean)
-  names(mondata) <- c("id", "actualvalues", "predvalues", "anomaly")
-  
-  # using ggplot to plot spatial data
-  
-  ggtract <- fortify(tract, region = "GEOID") 
-  ggtract <- left_join(ggtract, mondata, by=c("id")) # join tabular data
-  
-  if (i == 1 | i == 3) {
-    p[[i]] <- print(ggplot() +
-                      geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=anomaly), color="grey50") +
-                      scale_fill_gradientn(colors = c("cadetblue", "white", "red"), values = c(1,0.5, 0), name = 'Difference\n(mill. gal.)',limits=c(-4,4)) + 
-                      theme_light() + theme(text = element_text(size=18)) + xlab("Longitude (deg. E)") + ylab("Latitude (deg. N)") +
-                      #ggtitle(paste('Anomalies in ',seasnames[i],' Water Use')) + 
-                      ggtitle(paste(seasnames[i])) + 
-                      theme(legend.position = "none"))
-                      #theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
-                            #axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
-                            #panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank()))
-  } else {
-    p[[i]] <- print(ggplot() +
-                      geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=anomaly), color="grey50") +
-                      scale_fill_gradientn(colors = c("cadetblue", "white", "red"), values = c(1,0.5, 0), name = 'Difference\n(mill. gal.)',limits=c(-4,4)) + 
-                      theme_light() + theme(text = element_text(size=18)) + xlab("Longitude (deg. E)") + ylab("Latitude (deg. N)") +
-                      ggtitle(paste(seasnames[i])))   
-                      #theme(legend.position = "none") +
-                      #theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(), 
-                            #axis.ticks.x = element_blank(), axis.ticks.y = element_blank(), panel.grid.major = element_blank(), 
-                            #panel.grid.minor = element_blank(), panel.border = element_blank()))
-                      
-
-  }
-}
-
-plot_grid(p[[1]],p[[2]],p[[3]],p[[4]],align = 'v',nrow = 2, rel_widths = c(3/7,4/7))
-
-# correlation plot
-load('alldata.rdata')
-cormat <- cor(finaldata[[1]][,14:75])
-par(cex=.7)
-corrplot(cormat)
-
-# partial dependence plots - moderate intensity
-load('variableselection.rdata')
+setwd(outputdir)
+pdf('figure4.pdf', width = 14, height = 7)
 par(mfrow = c(2,3), lwd = 2,cex=1)
-partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],ownhouse, 
-            xlab = "Percentage of Owned Houses", ylab = "Water Use (gal.)", 
-            main = '')
-partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],families, 
-            xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],houseless50k, 
-            xlab = "Percentage of Houses Valued < $50k", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],walk, 
-            xlab = "Percentage of Pop. that Walks to Work", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],somecollege, 
-            xlab = "Percentage of Pop. w/ Some College", ylab = "Water Use (gal.)",
-            main = '')
-mtext("Partial Dependence Plots for Important Variables in the Spring Months", side = 3, line = -2, outer = TRUE)
-
-par(mfrow = c(2,3), lwd = 2,cex=1)
-partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],ownhouse, 
-            xlab = "Percentage of Owned Houses", ylab = "Water Use (mill. gal.)", 
-            main = '')
-partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],house50to100k, 
-            xlab = "Percentage of Houses Valued $50-100k", ylab = "Water Use (mill. gal.)", 
-            main = '')
-partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],income75to100k, 
-            xlab = "Percentage of Pop. w/ Income $75-100k", ylab = "Water Use (mill. gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],pop50to64, 
-            xlab = "Percentage of Pop. Aged 50-64", ylab = "Water Use (mill. gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],associates, 
-            xlab = "Percentage of Pop. w/ Assoc. Degree", ylab = "Water Use (mill. gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],families, 
-            xlab = "Percentage of Families w/ Kids", ylab = "Water Use (mill. gal.)",
-            main = '')
+partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],ownhouse, xlab = "Percentage of Owned Houses", ylab = "Water Use (mill. gal.)", main = '')
+partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],house50to100k, xlab = "Percentage of Houses Valued $50-100k", ylab = "Water Use (mill. gal.)", main = '')
+partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],income75to100k, xlab = "Percentage of Pop. w/ Income $75-100k", ylab = "Water Use (mill. gal.)",main = '')
+partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],pop50to64, xlab = "Percentage of Pop. Aged 50-64", ylab = "Water Use (mill. gal.)",main = '')
+partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],associates, xlab = "Percentage of Pop. w/ Assoc. Degree", ylab = "Water Use (mill. gal.)",main = '')
+partialPlot(allmodsfin[[1]][[2]], finaldata[[1]][[2]][,3:8],families, xlab = "Percentage of Families w/ Kids", ylab = "Water Use (mill. gal.)",main = '')
 mtext("Partial Dependence Plots for Important Variables in the Summer Months", side = 3, line = -2, outer = TRUE)
+dev.off()
 
-par(mfrow = c(2,3), lwd = 2,cex=1)
-partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],ownhouse, 
-            xlab = "Percentage of Owned Houses", ylab = "Water Use (gal.)", 
-            main = '')
-partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],somecollege, 
-            xlab = "Percentage of Pop. w/ Some College", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],house50to100k, 
-            xlab = "Percentage of Houses Valued $50-100k", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],families, 
-            xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],pop50to64, 
-            xlab = "Percentage of Pop. Aged 50-64", ylab = "Water Use (gal.)",
-            main = '')
-mtext("Partial Dependence Plots for Important Variables in the Fall Months", side = 3, line = -2, outer = TRUE)
+# SUPPLEMENTARY FIGURES
+# Uncomment the figures as needed
 
-par(mfrow = c(2,3), lwd = 2,cex=1)
-partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],ownhouse, 
-            xlab = "Percentage of Owned Houses", ylab = "Water Use (gal.)", 
-            main = '')
-partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],publictransit, 
-            xlab = "Percentage of Pop. Uses Public Trans.", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],families, 
-            xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],somecollege, 
-            xlab = "Percentage of Pop. w/ Some College", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],houseless50k, 
-            xlab = "Percentage of Houses Valued < $50k", ylab = "Water Use (gal.)",
-            main = '')
-mtext("Partial Dependence Plots for Important Variables in the Winter Months", side = 3, line = -2, outer = TRUE)
+# correlation plot (FIGURE S1)
 
-# high intensity plots
+#setwd(rdatadir)
+#load('alldata.rdata')
+#cormat <- cor(finaldata[[1]][,14:75])
+#par(cex=.7)
+#corrplot(cormat)
 
-par(mfrow = c(2,3), lwd = 2,cex=1)
-partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],asianlang, 
-            xlab = "Percentage of Pop. w/ Native Asian Lang.", ylab = "Water Use (gal.)", 
-            main = '')
-partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],married, 
-            xlab = "Percentage of Married People", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],europeanlang, 
-            xlab = "Percentage of Pop. w/ Native Euro. Lang.", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],income75to100k, 
-            xlab = "Percentage of Pop. w/ Income $75-100k", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],black, 
-            xlab = "Percentage of Black People", ylab = "Water Use (gal.)",
-            main = '')
-mtext("Partial Dependence Plots for Important Variables in the Spring Months", side = 3, line = -2, outer = TRUE)
+# partial dependence plots - moderate intensity, Spring, Fall, and Winter (FIGURES S2-S4)
 
-par(mfrow = c(2,3), lwd = 2,cex=1)
-partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],families, 
-            xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)", 
-            main = '')
-partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],separated, 
-            xlab = "Percentage of Separated People", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],single, 
-            xlab = "Percentage of Single People", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],workfromhome, 
-            xlab = "Percentage of Pop. that Works from Home", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],income100to150k, 
-            xlab = "Percentage of Pop. w/ Income $100-150k", ylab = "Water Use (gal.)",
-            main = '')
-mtext("Partial Dependence Plots for Important Variables in the Summer Months", side = 3, line = -2, outer = TRUE)
+#setwd(rdatadir)
+#load('variableselection.rdata')
+#par(mfrow = c(2,3), lwd = 2,cex=1)
+#partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],ownhouse, xlab = "Percentage of Owned Houses", ylab = "Water Use (gal.)", main = '')
+#partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],families, xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],houseless50k, xlab = "Percentage of Houses Valued < $50k", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],walk, xlab = "Percentage of Pop. that Walks to Work", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[1]], finaldata[[1]][[1]][,3:7],somecollege, xlab = "Percentage of Pop. w/ Some College", ylab = "Water Use (gal.)",main = '')
+#mtext("Partial Dependence Plots for Important Variables in the Spring Months", side = 3, line = -2, outer = TRUE)
 
+#par(mfrow = c(2,3), lwd = 2,cex=1)
+#partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],ownhouse, xlab = "Percentage of Owned Houses", ylab = "Water Use (gal.)", main = '')
+#partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],somecollege, xlab = "Percentage of Pop. w/ Some College", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],house50to100k, xlab = "Percentage of Houses Valued $50-100k", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],families, xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[3]], finaldata[[1]][[3]][,3:7],pop50to64, xlab = "Percentage of Pop. Aged 50-64", ylab = "Water Use (gal.)",main = '')
+#mtext("Partial Dependence Plots for Important Variables in the Fall Months", side = 3, line = -2, outer = TRUE)
 
-par(mfrow = c(2,3), lwd = 2,cex=1)
-partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],families, 
-            xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)", 
-            main = '')
-partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],income100to150k, 
-            xlab = "Percentage of Pop. w/ Income $100-150k", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],separated, 
-            xlab = "Percentage of Separated People", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],asiapob, 
-            xlab = "Percentage of Asian Immigrants", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],othermstat, 
-            xlab = "Percentage of Pop. w/ 'Other' Marital Status", ylab = "Water Use (gal.)",
-            main = '')
-mtext("Partial Dependence Plots for Important Variables in the Fall Months", side = 3, line = -2, outer = TRUE)
+#par(mfrow = c(2,3), lwd = 2,cex=1)
+#partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],ownhouse, xlab = "Percentage of Owned Houses", ylab = "Water Use (gal.)", main = '')
+#partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],publictransit, xlab = "Percentage of Pop. Uses Public Trans.", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],families, xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],somecollege, xlab = "Percentage of Pop. w/ Some College", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[1]][[4]], finaldata[[1]][[4]][,3:7],houseless50k, xlab = "Percentage of Houses Valued < $50k", ylab = "Water Use (gal.)",main = '')
+#mtext("Partial Dependence Plots for Important Variables in the Winter Months", side = 3, line = -2, outer = TRUE)
 
-par(mfrow = c(2,3), lwd = 2,cex=1)
-partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],families, 
-            xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)", 
-            main = '')
-partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],income50to75k, 
-            xlab = "Percentage of Pop. w/ Income $50-75k", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],singlecar, 
-            xlab = "Percentage of Pop. that Drives to Work", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],income100to150k, 
-            xlab = "Percentage of Pop. w/ Income $100-150k", ylab = "Water Use (gal.)",
-            main = '')
-partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],mobilehome, 
-            xlab = "Percentage of Pop. w/ Mobile Homes", ylab = "Water Use (gal.)",
-            main = '')
-mtext("Partial Dependence Plots for Important Variables in the Winter Months", side = 3, line = -2, outer = TRUE)
+# high intensity plots (FIGURES S7-S10)
 
-# plotting specific census variables
-setwd(datadir2)
-load('censusdata.rdata')
+#par(mfrow = c(2,3), lwd = 2,cex=1)
+#partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],asianlang, xlab = "Percentage of Pop. w/ Native Asian Lang.", ylab = "Water Use (gal.)", main = '')
+#partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],married, xlab = "Percentage of Married People", ylab = "Water Use (gal.)", main = '')
+#partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],europeanlang, xlab = "Percentage of Pop. w/ Native Euro. Lang.", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],income75to100k, xlab = "Percentage of Pop. w/ Income $75-100k", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[1]], finaldata[[2]][[1]][,3:7],black, xlab = "Percentage of Black People", ylab = "Water Use (gal.)",main = '')
+#mtext("Partial Dependence Plots for Important Variables in the Spring Months", side = 3, line = -2, outer = TRUE)
 
-mondata <- data.frame(alldatafin[[1]][[2]][[1]], alldatafin[[1]][[2]][[2]])
-mondata <- aggregate(mondata[,2], by=list(mondata[,1]), FUN=mean)
-names(mondata) <- c("id", "consumption")
+#par(mfrow = c(2,3), lwd = 2,cex=1)
+#partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],families, xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)", main = '')
+#partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],separated, xlab = "Percentage of Separated People", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],single, xlab = "Percentage of Single People", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],workfromhome, xlab = "Percentage of Pop. that Works from Home", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[2]], finaldata[[2]][[2]][,3:7],income100to150k, xlab = "Percentage of Pop. w/ Income $100-150k", ylab = "Water Use (gal.)",main = '')
+#mtext("Partial Dependence Plots for Important Variables in the Summer Months", side = 3, line = -2, outer = TRUE)
 
-censusdata[,1] <- gsub("14000US","",censusdata[,1])
-specvariable <- data.frame(censusdata$geoid,censusdata$house50to100k, censusdata$incomeless20k + censusdata$income20to35k + censusdata$income35to50k, censusdata$walk)
-names(specvariable) <- c('id', 'house50to100k', 'incomeless50k', 'walktowork')
+#par(mfrow = c(2,3), lwd = 2,cex=1)
+#partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],families, xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)", main = '')
+#partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],income100to150k, xlab = "Percentage of Pop. w/ Income $100-150k", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],separated, xlab = "Percentage of Separated People", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],asiapob, xlab = "Percentage of Asian Immigrants", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[3]], finaldata[[2]][[3]][,3:7],othermstat, xlab = "Percentage of Pop. w/ 'Other' Marital Status", ylab = "Water Use (gal.)",main = '')
+#mtext("Partial Dependence Plots for Important Variables in the Fall Months", side = 3, line = -2, outer = TRUE)
 
-combdata2 <- left_join(mondata, specvariable, by = c('id'))
+#par(mfrow = c(2,3), lwd = 2,cex=1)
+#partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],families, xlab = "Percentage of Families w/ Kids", ylab = "Water Use (gal.)", main = '')
+#partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],income50to75k, xlab = "Percentage of Pop. w/ Income $50-75k", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],singlecar, xlab = "Percentage of Pop. that Drives to Work", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],income100to150k, xlab = "Percentage of Pop. w/ Income $100-150k", ylab = "Water Use (gal.)",main = '')
+#partialPlot(allmodsfin[[2]][[4]], finaldata[[2]][[4]][,3:7],mobilehome, xlab = "Percentage of Pop. w/ Mobile Homes", ylab = "Water Use (gal.)",main = '')
+#mtext("Partial Dependence Plots for Important Variables in the Winter Months", side = 3, line = -2, outer = TRUE)
 
-ggtract <- fortify(tract, region = "GEOID") 
-ggtract <- left_join(ggtract, combdata2, by=c("id")) # join tabular data
+# plotting specific census variables (FIGURE S11)
+
+#setwd(rdatadir)
+#load('censusdata.rdata')
+
+#mondata <- data.frame(alldatafin[[1]][[2]][[1]], alldatafin[[1]][[2]][[2]])
+#mondata <- aggregate(mondata[,2], by=list(mondata[,1]), FUN=mean)
+#names(mondata) <- c("id", "consumption")
+
+#censusdata[,1] <- gsub("14000US","",censusdata[,1])
+#specvariable <- data.frame(censusdata$geoid,censusdata$house50to100k, censusdata$incomeless20k + censusdata$income20to35k + censusdata$income35to50k, censusdata$walk)
+#names(specvariable) <- c('id', 'house50to100k', 'incomeless50k', 'walktowork')
+
+#combdata2 <- left_join(mondata, specvariable, by = c('id'))
+
+#ggtract <- fortify(tract, region = "GEOID") 
+#ggtract <- left_join(ggtract, combdata2, by=c("id")) # join tabular data
 
 
-p1 <- ggplot() + geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=consumption), color="grey50") +
-  scale_fill_gradient(high = '#08306b', low = '#f7fbff', name = 'Mill. Gal.',limits=c(0,10)) + 
-  theme_light() + theme(text = element_text(size=18)) +
-  ggtitle('Summer Water Consumption') +
-  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
-        axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
-        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank())
+#p1 <- ggplot() + geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=consumption), color="grey50") +
+#  scale_fill_gradient(high = '#08306b', low = '#f7fbff', name = 'Mill. Gal.',limits=c(0,10)) + 
+#  theme_light() + theme(text = element_text(size=18)) +
+#  ggtitle('Summer Water Consumption') +
+#  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
+#        axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
+#        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank())
 
-p2 <- ggplot() + geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=house50to100k), color="grey50") +
-  scale_fill_gradientn(colors = c("cadetblue", "white", "#f2b195"),values = c(1,.3,0), name = '%',limits=c(0,100)) + 
-  theme_light() + theme(text = element_text(size=18)) +
-  ggtitle('Houses Valued $50-100k') +
-  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
-        axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
-        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank())
+#p2 <- ggplot() + geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=house50to100k), color="grey50") +
+#  scale_fill_gradientn(colors = c("cadetblue", "white", "#f2b195"),values = c(1,.3,0), name = '%',limits=c(0,100)) + 
+#  theme_light() + theme(text = element_text(size=18)) +
+#  ggtitle('Houses Valued $50-100k') +
+#  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
+#        axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
+#        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank())
 
-p3 <- ggplot() + geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=incomeless50k), color="grey50") +
-  scale_fill_gradient(high = '#00441b', low = '#f7fcf5', name = '%',limits=c(20,100)) + 
-  theme_light() + theme(text = element_text(size=18)) + 
-  ggtitle('Household Income < $50k') + 
-  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
-        axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
-        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank())
+#p3 <- ggplot() + geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=incomeless50k), color="grey50") +
+#  scale_fill_gradient(high = '#00441b', low = '#f7fcf5', name = '%',limits=c(20,100)) + 
+#  theme_light() + theme(text = element_text(size=18)) + 
+#  ggtitle('Household Income < $50k') + 
+#  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
+#        axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
+#        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank())
 
-p4 <- ggplot() + geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=walktowork), color="grey50") +
-  scale_fill_gradient(high = '#3f007d', low = '#fcfbfd', name = '%',limits=c(0,30)) + 
-  theme_light() + theme(text = element_text(size=18)) + 
-  ggtitle('Population that Walks to Work') +
-  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
-        axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
-        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank())
+#p4 <- ggplot() + geom_polygon(data = ggtract , aes(x=long, y=lat, group = group, fill=walktowork), color="grey50") +
+#  scale_fill_gradient(high = '#3f007d', low = '#fcfbfd', name = '%',limits=c(0,30)) + 
+#  theme_light() + theme(text = element_text(size=18)) + 
+#  ggtitle('Population that Walks to Work') +
+#  theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.title = element_blank(),
+#        axis.ticks.x = element_blank(), axis.ticks.y = element_blank(),
+#        panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank())
 
-
-plot_grid(p1,p4,p2,p3,align = 'v',nrow = 2)
+#plot_grid(p1,p4,p2,p3,align = 'v',nrow = 2)
 
 
