@@ -28,7 +28,7 @@ library(cowplot)
 library(VSURF)    # for comparing variable selection techniques
 
 # set file path
-# NOTE: set this path to the folder on your personal machine where you downaloded the GitHub zip folder
+# NOTE: set this path to the folder on your personal machine which contains the downloaded data 
 # for example: path <- '/Users/rqo5125/Downloads/WaterConsumptionAnalysis-main'
 
 path <- '' # main file path
