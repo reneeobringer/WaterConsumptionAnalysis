@@ -402,12 +402,12 @@ for (d in 1:2) {
   
 }
 
-# save measures of model performances for the moderate-intensity dataset
+# save measures of model performances for the moderate-intensity dataset (TABLE 2)
 mod_perf <- data.frame(allrsqfin[[1]], allrmsefin[[1]]*1000000, allnrmsefin[[1]], row.names = c('Spring', 'Summer', 'Fall', 'Winter'))
 names(mod_perf) <- c('R^2', 'RMSE (gal.)', 'NRMSE')
 
 setwd(outputdir)
-write.csv(mod_perf, 'modelperformance.csv')
+write.csv(mod_perf, 'modelperformance_table2.csv')
 
 setwd(rdatadir)
 save(list=c("alldatafin","allmodsfin","allrsqfin","allrmsefin","allnrmsefin"), file="finalanalysis.rdata")
