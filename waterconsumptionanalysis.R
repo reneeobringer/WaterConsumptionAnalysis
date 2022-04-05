@@ -419,6 +419,9 @@ load('finalanalysis.rdata')
 
 # FIGURE 2
 
+# setting up labels
+seasnames <- c('Spring','Summer','Fall','Winter')
+
 # edit geoid column
 for (i in 1:4) {
   alldatafin[[1]][[i]][[1]] <- gsub("14000US","",alldatafin[[1]][[i]][[1]])
@@ -462,7 +465,6 @@ dev.off()
 # FIGURE 3 
 
 # setting up labels
-seasnames <- c('Spring','Summer','Fall','Winter')
 labelnames <- list(c('Some College Eduction','Families w/ Kids','House Value < $50k','Home Ownership','Walk to Work'),
                    c("Associate's Degree",'Income $75k-$100k','Families w/ Kids','House Value $50k-$100k','Home Ownership','Aged 50-64'),
                    c('Some College Education','Families w/ Kids','House Value $50k-$100k','Home Ownership','Aged 50-64'),
