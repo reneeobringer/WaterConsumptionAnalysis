@@ -2,16 +2,7 @@
 
 Quantitative data and code for an analysis of water consumption in Indianapolis, Indiana at the census tract level. The results from the analysis are have been accepted for publication in the _Journal of Water Resources Management and Planning_.
 
-The manuscript, once published, will be available to download. The article can be cited as: 
-
-```bibtex
-@article{obringer2022,
-  title = {Improving the Interpretation of Data-Driven Water Consumption Models via the Use of Social Norms},
-  author = {Obringer, Renee and Nateghi, Roshanak and Ma, Zhao and Kumar, Rohini},
-  year = {accepted},
-  journal = {Journal of Water Resources Planning and Management}
-}
-```
+The manuscript, once published, will be available to download.
 
 A permanent version of this repository is available on Zenodo: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6452575.svg)](https://doi.org/10.5281/zenodo.6452575). 
 
