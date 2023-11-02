@@ -1,6 +1,6 @@
 # WaterConsumptionAnalysis
 
-Quantitative data and code for an analysis of water consumption in Indianapolis, Indiana at the census tract level. The results from the analysis are have been published in the [_Journal of Water Resources Management and Planning_](https://doi.org/10.1061/(ASCE)WR.1943-5452.0001611). The manuscript can be cited as:
+Quantitative data and code for an analysis of water consumption in Indianapolis, Indiana at the census tract level. The results from the analysis have been published in the [_Journal of Water Resources Management and Planning_](https://doi.org/10.1061/(ASCE)WR.1943-5452.0001611). The manuscript can be cited as:
 
 ```bibtex
 @article{obringer2022,
